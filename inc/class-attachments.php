@@ -116,7 +116,8 @@ class Attachments {
 			$body    = [
 				'bucket' => S3_UPLOADS_BUCKET,
 				'key'    => $key,
-				'aid'    => $post_ID
+				'aid'    => $post_ID,
+				'api_key' => $options['api_key']
 			];
 			$args    = [
 				'method'   => 'POST',

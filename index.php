@@ -10,7 +10,7 @@ Author URI: https://ndevr.io
 require_once dirname( __FILE__ ) . '/inc/class-settings.php';
 
 $options = get_option( 'omg_settings' );
-if ( ! isset( $options['enable'] ) ) {
+if ( isset( $options['enable'] ) ) {
 	require_once dirname( __FILE__ ) . '/inc/class-attachments.php';
 	require_once dirname( __FILE__ ) . '/inc/class-attachments-controller.php';
 
