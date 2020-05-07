@@ -41,48 +41,65 @@ class Settings {
 
 		register_setting( 'omgPage', 'omg_settings' );
 
-		add_settings_section(
-			'omgPage_section',
-			__( 'All the fields are required for properly implementing the plugin.', 'omg' ),
-			null,
-			'omgPage'
-		);
+		if ( ! defined( 'S3_UPLOADS_BUCKET' ) ) {
+            add_settings_section(
+                'omgPage_section',
+                __( 'You must define an S3_UPLOADS_BUCKET first.', 'omg' ),
+                null,
+                'omgPage'
+            );
+        } else {
+            add_settings_section(
+                'omgPage_section',
+                __( 'Without API Key and URL, images will be generated asynchronously on this server.', 'omg' ),
+                null,
+                'omgPage'
+            );
 
-		add_settings_field(
-			'enable',
-			__( 'Enable offloading media generation?', 'omg' ),
-			[ $this, 'enable_render' ],
-			'omgPage',
-			'omgPage_section'
-		);
+            add_settings_field(
+                's3_bucket',
+                __( 'S3 Bucket', 'omg' ),
+                [ $this, 's3_bucket_render' ],
+                'omgPage',
+                'omgPage_section'
+            );
 
-		add_settings_field(
-			'api_key',
-			__( 'API Key', 'omg' ),
-			[ $this, 'api_key_render' ],
-			'omgPage',
-			'omgPage_section'
-		);
+            add_settings_field(
+                'api_key',
+                __( 'API Key', 'omg' ),
+                [ $this, 'api_key_render' ],
+                'omgPage',
+                'omgPage_section'
+            );
 
-		add_settings_field(
-			'api_url',
-			__( 'API URL', 'omg' ),
-			[ $this, 'api_url_render' ],
-			'omgPage',
-			'omgPage_section'
-		);
+            add_settings_field(
+                'api_url',
+                __( 'API URL', 'omg' ),
+                [ $this, 'api_url_render' ],
+                'omgPage',
+                'omgPage_section'
+            );
+		}
 
 		add_settings_section(
 			'omgPage_section2',
-			__( 'Check all image sizes you want rendered by WordPress, checking thumbnail is highly recommended.', 'omg' ),
+			__( 'Check all image sizes you want offloaded, or not ever generated.', 'omg' ),
 			null,
 			'omgPage'
 		);
 
 		add_settings_field(
-			'og_approved_sizes',
-			__( 'Select Sizes', 'omg' ),
-			[ $this, 'approved_sizes_render' ],
+			'remove_sizes',
+			__( 'Never Generate', 'omg' ),
+			[ $this, 'remove_sizes_render' ],
+			'omgPage',
+			'omgPage_section2'
+		);
+
+		add_settings_field(
+			'offload_sizes',
+			__( 'Offload Generate', 'omg' ),
+			[ $this, 'offload_sizes_render' ],
 			'omgPage',
 			'omgPage_section2'
 		);
@@ -99,17 +116,24 @@ class Settings {
 		?>
         <input type='checkbox'
                name='omg_settings[enable]' <?php checked( $options['enable'], 1 ); ?>
-               value='1'>
+               value='1'/>
 		<?php
 
 	}
 
 
+	public function s3_bucket_render() {
+
+		?>
+        <input type='text' value='<?php echo esc_attr( S3_UPLOADS_BUCKET ); ?>' style="width:60%" readonly/>
+		<?php
+	}
+
 	public function api_key_render() {
 
 		$options = get_option( 'omg_settings' );
 		?>
-        <input type='text' name='omg_settings[api_key]' value='<?php echo $options['api_key']; ?>'>
+        <input type='text' name='omg_settings[api_key]' value='<?php echo esc_attr( $options['api_key'] ); ?>' style="width:60%"/>
 		<?php
 
 	}
@@ -119,21 +143,37 @@ class Settings {
 
 		$options = get_option( 'omg_settings' );
 		?>
-        <input type='text' name='omg_settings[api_url]' value='<?php echo $options['api_url']; ?>'>
+        <input type='text' name='omg_settings[api_url]' value='<?php echo esc_attr( $options['api_url'] ); ?>' style="width:60%"/>
 		<?php
 
 	}
 
 
-	public function approved_sizes_render() {
+	public function remove_sizes_render() {
 
 		$options     = get_option( 'omg_settings' );
 		$image_sizes = get_intermediate_image_sizes();
 		?>
-        <select name='omg_settings[approved_sizes][]' multiple>
+        <select name='omg_settings[remove_sizes][]' multiple>
         <?php foreach ( $image_sizes as $image_size ): ?>
-            <?php $selected = in_array( $image_size, $options['approved_sizes'] ) ? ' selected="selected" ' : ''; ?>
+            <?php $selected = in_array( $image_size, $options['remove_sizes'] ) ? ' selected="selected" ' : ''; ?>
             <option value='<?php echo esc_attr( $image_size ); ?>' <?php echo $selected; ?>><?php echo esc_html( $image_size ); ?></option>
+        <?php endforeach; ?>
+		<?php
+
+	}
+
+	public function offload_sizes_render() {
+
+		$options     = get_option( 'omg_settings' );
+		$image_sizes = get_intermediate_image_sizes();
+		?>
+        <select name='omg_settings[offload_sizes][]' multiple>
+        <?php foreach ( $image_sizes as $image_size ): ?>
+            <?php if ( ! in_array( $image_size, $options['remove_sizes'] ) ): ?>
+                <?php $selected = in_array( $image_size, $options['offload_sizes'] ) ? ' selected="selected" ' : ''; ?>
+                <option value='<?php echo esc_attr( $image_size ); ?>' <?php echo $selected; ?>><?php echo esc_html( $image_size ); ?></option>
+            <?php endif; ?>
         <?php endforeach; ?>
 		<?php
 
@@ -147,10 +187,10 @@ class Settings {
 
             <h2>Offload Media Generation</h2>
 
-			<?php
-			settings_fields( 'omgPage' );
-			do_settings_sections( 'omgPage' );
-			submit_button();
+            <?php
+            settings_fields( 'omgPage' );
+            do_settings_sections( 'omgPage' );
+            submit_button();
 			?>
 
         </form>

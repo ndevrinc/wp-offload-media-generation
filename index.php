@@ -9,8 +9,9 @@ Author URI: https://ndevr.io
 
 require_once dirname( __FILE__ ) . '/inc/class-settings.php';
 
+// Nothing to do if no image sizes were selected
 $options = get_option( 'omg_settings' );
-if ( isset( $options['enable'] ) ) {
+if ( isset( $options['remove_sizes'] ) && isset( $options['offload_sizes'] ) && ! empty( $options['remove_sizes'] ) && ! empty( $options['offload_sizes'] ) ) {
 	require_once dirname( __FILE__ ) . '/inc/class-attachments.php';
 	require_once dirname( __FILE__ ) . '/inc/class-attachments-controller.php';
 
