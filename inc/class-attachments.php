@@ -16,15 +16,76 @@ class Attachments {
 	}
 
 	private function __construct() {
-		add_filter( 'intermediate_image_sizes', [ $this, 'remove_default_image_sizes' ], 999, 1 );
+		add_filter( 'intermediate_image_sizes', [ $this, 'refine_image_sizes' ], 999, 1 );
 		add_action( 'add_attachment', [ $this, 'start_generation' ], 999 );
 
 	}
 
-	public function get_approved_sizes() {
-		$options = get_option( 'omg_settings', [ 'approved_sizes' => 'thumbnail' ] );
+	/**
+	 * Get all the registered image sizes along with their dimensions
+	 *
+	 * @global array $_wp_additional_image_sizes
+	 *
+	 * @link http://core.trac.wordpress.org/ticket/18947 Reference ticket
+	 *
+	 * @return array $image_sizes The image sizes
+	 */
+	private function get_all_image_sizes() {
+		global $_wp_additional_image_sizes;
 
-		return $options['approved_sizes'];
+		$default_image_sizes = get_intermediate_image_sizes();
+		$image_sizes         = [];
+
+		foreach ( $default_image_sizes as $size ) {
+			$image_sizes[ $size ]['width']  = intval( get_option( "{$size}_size_w" ) );
+			$image_sizes[ $size ]['height'] = intval( get_option( "{$size}_size_h" ) );
+			$image_sizes[ $size ]['crop']   = get_option( "{$size}_crop" ) ? get_option( "{$size}_crop" ) : false;
+		}
+
+		if ( isset( $_wp_additional_image_sizes ) && count( $_wp_additional_image_sizes ) ) {
+			$image_sizes = array_merge( $image_sizes, $_wp_additional_image_sizes );
+		}
+
+		return $image_sizes;
+	}
+
+	public function get_offload_sizes() {
+		$options       = get_option( 'omg_settings' );
+		$offload_sizes = [];
+
+		if ( isset( $options['offload_sizes'] ) ) {
+			$offload_sizes = $options['offload_sizes'];
+		}
+
+		global $pagenow;
+		if ( self::$only_approved ) {
+			// proceed
+		} else if ( 'options-general.php' === $pagenow ) {
+			$offload_sizes = [];
+		} else if ( is_admin() ) {
+			// proceed
+		} else {
+			$offload_sizes = [];
+		}
+
+		return $offload_sizes;
+
+	}
+
+	public function get_remove_sizes() {
+		global $pagenow;
+		$remove_sizes = [];
+
+		if ( 'options-general.php' !== $pagenow ) {
+			$options      = get_option( 'omg_settings' );
+			$remove_sizes = [];
+
+			if ( isset( $options['remove_sizes'] ) ) {
+				$remove_sizes = $options['remove_sizes'];
+			}
+		}
+
+		return $remove_sizes;
 	}
 
 	public static function set_only_approved( $value ) {
@@ -90,43 +151,69 @@ class Attachments {
 	}
 
 	/**
-	 * Optimizing the image sizes to only the largest of each aspect ratio
+	 * Refine the image sizes to only necessary ones
 	 *
 	 * @param $sizes
 	 *
 	 * @return array
 	 */
-	public function remove_default_image_sizes( $sizes ) {
-		if ( $this->get_only_approved() ) {
-			$sizes = $this->get_approved_sizes();
-		}
+	public function refine_image_sizes( $sizes ) {
+
+		$offload_sizes = $this->get_offload_sizes();
+		$sizes         = array_diff( $sizes, $offload_sizes );
+
+		$remove_sizes = $this->get_remove_sizes();
+		$sizes        = array_diff( $sizes, $remove_sizes );
 
 		return $sizes;
 	}
 
 	public function start_generation( $post_ID ) {
 
-		$post = get_post( $post_ID );
-		if ( 'attachment' === $post->post_type ) {
-			$guid     = $post->guid;
-			$guid_arr = explode( 'uploads/', $guid );
+		// No need to fire request if no images are set to offload
+		$options = get_option( 'omg_settings' );
+		if ( isset( $options['offload_sizes'] ) && ! empty( $options['offload_sizes'] ) ) {
+			$post     = get_post( $post_ID );
+			$hostname = $_SERVER['HTTP_HOST'];
+			$path     = '/wp-json/omg/v1/attachments';
 
-			$key     = 'uploads/' . $guid_arr[1];
-			$options = get_option( 'omg_settings' );
-			$body    = [
-				'bucket' => S3_UPLOADS_BUCKET,
-				'key'    => $key,
-				'aid'    => $post_ID,
-				'api_key' => $options['api_key']
-			];
-			$args    = [
-				'method'   => 'POST',
-				'blocking' => false,
-				'body'     => \GuzzleHttp\json_encode( $body )
-			];
+			$sizes         = [];
+			$all_sizes     = $this->get_all_image_sizes();
+			$offload_sizes = $this->get_offload_sizes();
+			foreach ( $offload_sizes as $size ) {
+				if ( isset( $all_sizes[ $size ] ) ) {
+					$sizes[] = [
+						$all_sizes[ $size ]['width'],
+						$all_sizes[ $size ]['height'],
+						$all_sizes[ $size ]['crop'],
+					];
+				}
+			}
 
-			$response = wp_remote_request( $options['api_url'], $args );
+			if ( 'attachment' === $post->post_type ) {
+				$guid     = $post->guid;
+				$guid_arr = explode( 'uploads/', $guid );
 
+				$key     = 'uploads/' . $guid_arr[1];
+				$options = get_option( 'omg_settings' );
+				$body    = [
+					'bucket'   => S3_UPLOADS_BUCKET,
+					'key'      => $key,
+					'aid'      => $post_ID,
+					'api_key'  => $options['api_key'],
+					'sizes'    => \GuzzleHttp\json_encode( $sizes ),
+					'hostname' => $hostname,
+					'path'     => $path
+				];
+				$args    = [
+					'method'   => 'POST',
+					'blocking' => false,
+					'body'     => \GuzzleHttp\json_encode( $body )
+				];
+
+				$response = wp_remote_request( $options['api_url'], $args );
+
+			}
 		}
 
 	}
