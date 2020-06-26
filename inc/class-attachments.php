@@ -128,7 +128,7 @@ class Attachments {
 			if ( false !== $imagesize ) {
 				// Update attachment meta data
 				$meta                         = [
-					'file'      => str_replace( wp_get_upload_dir(), '', $filename ),
+					'file'      => basename( $filename ),
 					'width'     => $imagesize[0],
 					'height'    => $imagesize[1],
 					'mime-type' => $imagesize['mime']
