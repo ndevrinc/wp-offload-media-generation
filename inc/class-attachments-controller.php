@@ -55,10 +55,10 @@ class Attachments_Controller extends WP_REST_Controller {
 	public function update_attachment( $request ) {
 
 		$updated = false;
+		$attachment_id = $request->get_param( 'aid' );
+		$s3_key        = $request->get_param( 'key' );
 
-		if ( ! empty( $request['aid'] && ! empty( $request['key'] ) ) ) {
-			$attachment_id = $request['aid'];
-			$s3_key        = $request['key'];
+		if ( ! empty( $attachment_id && ! empty( $s3_key ) ) ) {
 
 			if ( is_numeric( $attachment_id ) && is_string( $s3_key ) ) {
 				$image_path = wp_get_original_image_path( $attachment_id );
@@ -94,7 +94,7 @@ class Attachments_Controller extends WP_REST_Controller {
 		$options     = get_option( 'omg_settings' );
 		$stored_api_key = $options['api_key'];
 
-		if ( empty( $request['api_key'] ) || $stored_api_key !== $request['api_key'] ) {
+		if ( empty( $request->get_param( 'api_key' ) ) || $stored_api_key !== $request->get_param( 'api_key' ) ) {
 			return new WP_Error( 'rest_invalid', __( 'Not Allowed.' ), array( 'status' => rest_authorization_required_code() ) );;
 		}
 
